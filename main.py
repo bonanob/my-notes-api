@@ -5,6 +5,7 @@ from dotenv import load_dotenv
 import psycopg
 from psycopg.rows import dict_row
 from uuid import UUID
+from datetime import datetime
 
 load_dotenv() # read .env into environment variables
 
@@ -23,6 +24,15 @@ next_id = 1
 class NoteCreate(BaseModel):
     title: str
     content: str
+
+class NoteOut(BaseModel):
+    id: UUID
+    title: str
+    content: str | None
+    metadata: dict
+    created_at: datetime
+    updated_at: datetime
+
 
 @app.get("/")
 def read_root():
@@ -67,23 +77,18 @@ def list_notes():
         for row in rows
     ]
 
-@app.get("/notes/{note_id}")
+@app.get("/notes/{note_id}", response_model=NoteOut)
 def get_note(note_id: UUID):
     with get_connection() as conn:
         with conn.cursor() as cur:
             cur.execute(
-                "SELECT id, title, content, created_at FROM notes WHERE id = %s",
+                "SELECT id, title, content, metadata, created_at, updated_at FROM notes WHERE id = %s",
                 (note_id,),
             )
             row = cur.fetchone()
     if row is None:
         raise HTTPException(status_code=404, detail="Note not found")
-    return {
-        "id": str(row["id"]),
-        "title": row["title"],
-        "content": row["content"],
-        "created_at": row["created_at"],
-    }
+    return row
 
 
 @app.put("/notes/{note_id}")
