@@ -6,6 +6,16 @@ import psycopg
 from psycopg.rows import dict_row
 from uuid import UUID
 from datetime import datetime
+import bcrypt
+
+def hash_password(password: str) -> str:
+    pw_bytes = password.encode("utf-8")[:72]          # 72바이트로 안전하게 자름
+    hashed = bcrypt.hashpw(pw_bytes, bcrypt.gensalt())
+    return hashed.decode("utf-8")                      # DB엔 문자열로 저장
+
+def verify_password(password: str, password_hash: str) -> bool:
+    pw_bytes = password.encode("utf-8")[:72]
+    return bcrypt.checkpw(pw_bytes, password_hash.encode("utf-8"))
 
 load_dotenv() # read .env into environment variables
 
@@ -33,12 +43,21 @@ class NoteOut(BaseModel):
     created_at: datetime
     updated_at: datetime
 
+class UserCreate(BaseModel):
+    email: str
+    password: str
+
+class UserOut(BaseModel):
+    id: UUID
+    email: str
+    created_at: datetime
+
 
 @app.get("/")
 def read_root():
     return {"message": "Hello, notes!"}
 
-@app.post("/notes")
+@app.post("/notes", response_model=NoteOut)
 def create_note(note: NoteCreate):
     # global next_id
     # new_note = {"id": next_id, "title": note.title, "content": note.content}
@@ -49,33 +68,20 @@ def create_note(note: NoteCreate):
         with conn.cursor() as cur:
             cur.execute(
                 "INSERT INTO notes (title, content) VALUES (%s, %s) "
-                "RETURNING id, title, content, created_at",
+                "RETURNING id, title, content, metadata, created_at, updated_at",
                 (note.title, note.content),
             )
             row = cur.fetchone()
             conn.commit()
-    return {
-        "id": str(row["id"]),
-        "title": row["title"],
-        "content": row["content"],
-        "created_at": row["created_at"],
-    }
+    return row
 
-@app.get("/notes")
+@app.get("/notes", response_model=list[NoteOut])
 def list_notes():
     with get_connection() as conn:
         with conn.cursor() as cur:
-            cur.execute("SELECT id, title, content, created_at FROM notes ORDER BY created_at DESC")
+            cur.execute("SELECT id, title, content, metadata, created_at, updated_at FROM notes ORDER BY created_at DESC")
             rows = cur.fetchall()
-    return [
-        {
-            "id": str(row["id"]),
-            "title": row["title"],
-            "content": row["content"],
-            "created_at": row["created_at"],
-        }
-        for row in rows
-    ]
+    return rows
 
 @app.get("/notes/{note_id}", response_model=NoteOut)
 def get_note(note_id: UUID):
@@ -85,13 +91,13 @@ def get_note(note_id: UUID):
                 "SELECT id, title, content, metadata, created_at, updated_at FROM notes WHERE id = %s",
                 (note_id,),
             )
-            row = cur.fetchone()
+            row = cur.fetchall()
     if row is None:
         raise HTTPException(status_code=404, detail="Note not found")
     return row
 
 
-@app.put("/notes/{note_id}")
+@app.put("/notes/{note_id}", response_model=NoteOut)
 def update_note(note_id: UUID, update_note: NoteCreate):
     # for note in notes:
     #     if note["id"] == note_id:
@@ -104,20 +110,14 @@ def update_note(note_id: UUID, update_note: NoteCreate):
             cur.execute(
                 "UPDATE notes SET title = %s, content = %s, updated_at = now() "
                 "WHERE id = %s "
-                "RETURNING id, title, content, created_at, updated_at",
+                "RETURNING id, title, content, metadata, created_at, updated_at",
                 (update_note.title, update_note.content, str(note_id))
             )
             row = cur.fetchone()
             conn.commit()
     if row is None:
         raise HTTPException(status_code=404, detail="Note not found")
-    return {
-        "id": str(row["id"]),
-        "title": row["title"],
-        "content": row["content"],
-        "created_at": row["created_at"],
-        "updated_at": row["updated_at"],
-    }
+    return row
 
 
 @app.delete("/notes/{note_id}")
@@ -148,3 +148,19 @@ def health_db():
             cur.execute("SELECT 1")
             result = cur.fetchone()
     return {"db": "ok", "result": result[0]}
+
+@app.post("/register", response_model=UserOut)
+def register(user: UserCreate):
+    hashed = hash_password(user.password)
+
+    with get_connection() as conn:
+        with conn.cursor(row_factory=dict_row) as cur:
+            cur.execute(
+                "INSERT INTO users (email, password_hash)"
+                "VALUES (%s, %s) "
+                "RETURNING id, email, created_at",
+                (user.email, hashed)
+            )
+            row = cur.fetchone()
+            conn.commit()
+            return row

@@ -4,7 +4,7 @@ A note-taking API built with FastAPI and PostgreSQL — the foundation of a
 longer project in AI Data / Platform Engineering.
 
 ## Stack
-Python 3.12 · FastAPI · PostgreSQL 16 · psycopg 3 · uv
+Python 3.12 · FastAPI · PostgreSQL 16 · psycopg 3 · bcrypt · uv
 
 ## Features
 - Full CRUD for notes (create, list, get, update, delete)
@@ -38,5 +38,6 @@ Open http://localhost:8000/docs to try the endpoints.
 Health check: http://localhost:8000/health/db returns `{"db":"ok","result":1}`.
 
 ## Status
-Stage 1 (Foundation). CRUD complete and backed by PostgreSQL; data persists
-across restarts. Next: response models, JWT auth, then a React frontend.
+Stage 1 (Foundation). CRUD complete with PostgreSQL persistence and Pydantic
+response models (`NoteOut`). Auth in progress: a `users` table and `POST /register`
+(bcrypt-hashed passwords) are in place. Next: login + JWT tokens, then a React frontend.
