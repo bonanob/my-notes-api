@@ -5,8 +5,20 @@ from dotenv import load_dotenv
 import psycopg
 from psycopg.rows import dict_row
 from uuid import UUID
-from datetime import datetime
+from datetime import datetime, timedelta, timezone
 import bcrypt
+import jwt
+
+SECRET_KEY = os.getenv("SECRET_KEY")
+ALGORITHM = "HS256"
+ACCESS_TOKEN_EXPIRE_MINUTES = 30
+
+def create_access_token(user_id: str) -> str:
+    expire = datetime.now(timezone.utc) + timedelta(minutes=ACCESS_TOKEN_EXPIRE_MINUTES)
+    payload = {"sub": user_id, "exp": expire}
+    token = jwt.encode(payload, SECRET_KEY, algorithm=ALGORITHM)
+    return token
+
 
 def hash_password(password: str) -> str:
     pw_bytes = password.encode("utf-8")[:72]          # 72바이트로 안전하게 자름
