@@ -176,3 +176,21 @@ def register(user: UserCreate):
             row = cur.fetchone()
             conn.commit()
             return row
+
+@app.post("/login")
+def login(user: UserCreate):
+    with get_connection() as conn:
+        with conn.cursor(row_factory=dict_row) as cur:
+            cur.execute(
+                "SELECT id, email, password_hash "
+                "FROM users "
+                "WHERE email = %s",
+                (user.email,),
+            )
+            row = cur.fetchone()
+    if row is None:
+        raise HTTPException(status_code = 401, detail="Incorrect email or password")
+    if not verify_password(user.password, row["password_hash"]):
+        raise HTTPException(status_code=401, detail="Incorrect email or password")
+    new_token = create_access_token(str(row["id"]))
+    return {"access token": new_token, "token_type": "bearer"}
